@@ -1,6 +1,6 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "short_name": "Tritown Demo",
+  "name": "Triple Town Demo using React",
   "icons": [
     {
       "src": "favicon.ico",
