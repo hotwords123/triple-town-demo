@@ -86,7 +86,7 @@ export class GameState {
     if (target.value) {
       throw new ErrorMessage("You can't put structures here, since it's not empty.");
     }
-    this.command = `BUILD ${x + 1} ${y + 1}`;
+    this.command = `PUT ${x + 1} ${y + 1}`;
     ++this.numBuilt;
     return this.putStructure(target, type);
   }

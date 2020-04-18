@@ -185,12 +185,12 @@ class Game extends React.Component {
     }
     if (evt.ctrlKey && evt.which === 67) { // Ctrl+C: copy
       evt.preventDefault();
-      copyText(this.exportCommands().join('\n'));
-      Toast('Operations have been copied to clipboard.');
+      copyText(this.exportCommands().concat('').join('\n'));
+      Toast('Commands have been copied to clipboard.');
     }
     if (evt.ctrlKey && evt.which === 83) { // Ctrl+S: save
       evt.preventDefault();
-      saveTextAsFile(this.loadedFilename.replace('.in', '.out'), this.exportCommands().concat('END').join('\n'));
+      saveTextAsFile(this.loadedFilename.replace('.in', '.out'), this.exportCommands().concat('END', '').join('\n'));
       Toast('Output file has been saved.');
     }
   }
