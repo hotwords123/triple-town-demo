@@ -101,18 +101,21 @@ class Game extends React.Component {
       hoverType: ''
     };
     this.fileInput = React.createRef();
+    this.commandInput = React.createRef();
     this.handleHover = this.handleHover.bind(this);
     this.handleClick = this.handleClick.bind(this);
     this.handleKeyDown = this.handleKeyDown.bind(this);
     this.handleHistoryHover = this.handleHistoryHover.bind(this);
+    this.handleCommandExec = this.handleCommandExec.bind(this);
+    this.handleCommandClear = this.handleCommandClear.bind(this);
   }
 
   componentDidMount() {
-    document.addEventListener('keydown', this.handleKeyDown);
+    document.addEventListener('keydown', this.handleKeyDown, false);
   }
 
   componentWillUnmount() {
-    document.removeEventListener('keydown', this.handleKeyDown);
+    document.removeEventListener('keydown', this.handleKeyDown, false);
   }
 
   /**
@@ -217,6 +220,14 @@ class Game extends React.Component {
     this.setState({ hover: cell, hoverType: 'cell' });
   }
 
+  buildWithin(current, x, y) {
+    const queue = this.state.buildQueue;
+    if (current.numBuilt === queue.length) {
+      throw new ErrorMessage("You have no structure left to build.");
+    }
+    return current.build(x, y, queue[current.numBuilt]);
+  }
+
   handleClick(cell, evt) {
     const { x, y } = cell;
 
@@ -229,14 +240,7 @@ class Game extends React.Component {
 
       switch (toolName) {
         case 'build': {
-          const queue = this.state.buildQueue;
-          if (current.numBuilt === queue.length) {
-            throw new ErrorMessage("You have no structure left to build.");
-          }
-
-          let result = current.build(x, y, queue[current.numBuilt]);
-          // todo: animation
-          console.log(result);
+          this.buildWithin(current, x, y);
           break;
         }
 
@@ -267,6 +271,92 @@ class Game extends React.Component {
 
   handleHistoryHover(item) {
     this.setState({ hover: item, hoverType: 'history' });
+  }
+
+  handleCommandExec() {
+    const lines = this.commandInput.current.value.split('\n');
+
+    const { stepNumber, history } = this.state;
+    const results = [];
+    let current = this.currentStep;
+
+    function checkParams(params) {
+      if (params.length !== 2) {
+        throw new ErrorMessage('There should be exactly 2 params for this command.');
+      }
+      const [x, y] = params.map(a => {
+        a = Number(a);
+        if (!Number.isInteger(a)) throw new ErrorMessage('All params should be integers.');
+        return a - 1;
+      });
+      if (!current.grid.inBound(x, y)) throw new ErrorMessage('Coordinates out of range.');
+      return [x, y];
+    }
+
+    let lineNumber = 0, cntCommands = 0;
+
+    for (let line of lines) {
+      lineNumber++;
+      line = line.trim();
+      if (!line) continue;
+
+      cntCommands++;
+      const [command, ...params] = line.split(/\s+/);
+
+      try {
+        current = current.clone();
+
+        switch (command.toLowerCase()) {
+          case 'put': {
+            const [x, y] = checkParams(params);
+            this.buildWithin(current, x, y);
+            break;
+          }
+          
+          case 'star': {
+            const [x, y] = checkParams(params);
+            current.putStar(x, y);
+            break;
+          }
+          
+          case 'bomber': {
+            const [x, y] = checkParams(params);
+            current.putBomb(x, y);
+            break;
+          }
+          
+          default:
+            throw new ErrorMessage(`Unknown command '${command}'.`);
+        }
+
+        results.push(current);
+      } catch (err) {
+        if (err instanceof ErrorMessage) {
+          Toast(`Error on line ${lineNumber}: ${err.message}\nExecution was interrupted.`);
+          return;
+        } else {
+          Toast(`An unknown error occured when executing line ${lineNumber}.\nChanges will be rolled back.`);
+          return;
+        }
+      }
+    }
+
+    if (cntCommands) {
+      Toast(`Success: ${cntCommands} command${cntCommands > 1 ? 's were' : ' was'} executed.`);
+    } else {
+      Toast('No command was found.');
+      return;
+    }
+
+    this.setState({
+      stepNumber: stepNumber + results.length,
+      history: history.slice(0, stepNumber + 1).concat(results)
+    });
+  }
+
+  handleCommandClear() {
+    this.commandInput.current.value = '';
+    Toast('Commands have been cleared.');
   }
 
   /**
@@ -316,7 +406,7 @@ class Game extends React.Component {
         break;
       }
 
-      case 'bomb': break;
+      default: break;
     }
 
     return current;
@@ -433,6 +523,23 @@ class Game extends React.Component {
             <ol start="0">
               {historyItems}
             </ol>
+          </div>
+          <div className="game-command-input">
+            <div>
+              <textarea
+                rows="15"
+                cols="15"
+                ref={this.commandInput}
+                onMouseDown={(evt) => evt.target.readOnly = false}
+                onBlur={(evt) => evt.target.readOnly = true} // Fix auto focus
+                onKeyDown={(evt) => evt.nativeEvent.stopImmediatePropagation()}
+              ></textarea>
+              <input type="hidden" id="fix-focus" />
+            </div>
+            <div className="actions">
+              <input type="button" value="Execute" onClick={this.handleCommandExec} />
+              <input type="button" value="Clear" onClick={this.handleCommandClear} />
+            </div>
           </div>
         </div>
       </div>
