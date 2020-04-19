@@ -8,32 +8,38 @@ import Toast from './Toast';
 
 class BoardCell extends React.Component {
   render() {
-    const classTags = this.props.classTag.map(tag => 'board-cell-' + tag);
+    const cell = this.props.cell;
+    const { x, y, value, isPreview, reaction } = cell;
+    const classNames = [];
+
+    classNames.push(value ? value : 'empty');
+    if (isPreview) classNames.push('preview');
+    if (reaction) classNames.push('reaction');
 
     return (
       <div
-        className={makeClassName('board-cell', classTags)}
-        onMouseOver={this.props.onHover}
-        onMouseUp={this.props.onClick}
+        className={makeClassName('board-cell', classNames.map(a => 'board-cell-' + a))}
+        onMouseOver={() => this.props.onHover({ x, y })}
+        onMouseOut={() => this.props.onHover(null)}
+        onMouseUp={(evt) => this.props.onClick(cell, evt)}
         onContextMenu={(evt) => evt.preventDefault()}
       >
-        {this.props.value}
+        <span>{value}</span>
       </div>
     );
   }
 }
 
 class Board extends React.Component {
-  renderCell({ x, y, value }) {
-    const classTag = [value ? value : 'empty'];
+  renderCell(cell) {
+    const { x, y } = cell;
 
     return (
       <BoardCell
         key={`${x},${y}`}
-        value={value}
-        classTag={classTag}
-        onHover={() => this.props.onHover(x, y)}
-        onClick={(evt) => this.props.onClick(x, y, evt)}
+        cell={cell}
+        onHover={this.props.onHover}
+        onClick={this.props.onClick}
       />
     );
   }
@@ -91,13 +97,17 @@ class Game extends React.Component {
       history: [],
       stepNumber: 0,
       selectedTools: ['build', 'star'],
-      preview: null
+      hover: null,
+      hoverType: ''
     };
     this.fileInput = React.createRef();
+    this.handleHover = this.handleHover.bind(this);
+    this.handleClick = this.handleClick.bind(this);
+    this.handleKeyDown = this.handleKeyDown.bind(this);
+    this.handleHistoryHover = this.handleHistoryHover.bind(this);
   }
 
   componentDidMount() {
-    this.handleKeyDown = this.handleKeyDown.bind(this);
     document.addEventListener('keydown', this.handleKeyDown);
   }
 
@@ -170,37 +180,45 @@ class Game extends React.Component {
   }
 
   handleKeyDown(evt) {
-    if (!this.state.loaded || this.state.preview) return;
+    if (!this.state.loaded) return;
     if (evt.ctrlKey && evt.which === 90) { // Ctrl+Z: undo
       const stepNumber = this.state.stepNumber;
       if (stepNumber > 0) {
         this.setState({ stepNumber: stepNumber - 1 });
+      } else {
+        Toast("No operation can be undone.");
       }
     }
     if (evt.ctrlKey && evt.which === 89) { // Ctrl+Y: redo
       const stepNumber = this.state.stepNumber;
       if (stepNumber < this.state.history.length - 1) {
         this.setState({ stepNumber: stepNumber + 1 });
+      } else {
+        Toast("No operation can be redone.");
       }
     }
     if (evt.ctrlKey && evt.which === 67) { // Ctrl+C: copy
       evt.preventDefault();
-      copyText(this.exportCommands().concat('').join('\n'));
-      Toast('Commands have been copied to clipboard.');
+      if (this.state.stepNumber > 0) {
+        copyText(this.exportCommands().concat('').join('\n'));
+        Toast("Commands have been copied to clipboard.");
+      } else {
+        Toast("No command can be copied.");
+      }
     }
     if (evt.ctrlKey && evt.which === 83) { // Ctrl+S: save
       evt.preventDefault();
       saveTextAsFile(this.loadedFilename.replace('.in', '.out'), this.exportCommands().concat('END', '').join('\n'));
-      Toast('Output file has been saved.');
+      Toast("Output file has been saved.");
     }
   }
 
-  handleHover(x, y) {
-    if (!this.state.loaded || this.state.preview) return;
+  handleHover(cell) {
+    this.setState({ hover: cell, hoverType: 'cell' });
   }
 
-  handleClick(x, y, evt) {
-    if (!this.state.loaded || this.state.preview) return;
+  handleClick(cell, evt) {
+    const { x, y } = cell;
 
     let history = this.state.history;
     let stepNumber = this.state.stepNumber;
@@ -210,16 +228,17 @@ class Game extends React.Component {
       let toolName = this.state.selectedTools[evt.button === 0 ? 0 : 1];
 
       switch (toolName) {
-        case 'build':
+        case 'build': {
           const queue = this.state.buildQueue;
           if (current.numBuilt === queue.length) {
-            throw new ErrorMessage("You have no structure left to be built.");
+            throw new ErrorMessage("You have no structure left to build.");
           }
 
           let result = current.build(x, y, queue[current.numBuilt]);
           // todo: animation
           console.log(result);
           break;
+        }
 
         case 'star':
           current.putStar(x, y);
@@ -246,16 +265,85 @@ class Game extends React.Component {
     this.setState({ history, stepNumber });
   }
 
-  jumpTo(step) {
-    this.setState({
-      stepNumber: step
-    });
+  handleHistoryHover(item) {
+    this.setState({ hover: item, hoverType: 'history' });
+  }
+
+  /**
+   * @param {GameState} current
+   * @param {String} too
+   * @param {*} coord
+   */
+  getToolPreview(current, tool, { x, y }) {
+    const cell = current.grid.cells[x][y];
+
+    switch (tool) {
+      case 'build': {
+        const queue = this.state.buildQueue;
+        if (current.numBuilt < queue.length && !cell.value) {
+          const preview = current.clone();
+          const target = preview.grid.cells[x][y];
+          const type = queue[current.numBuilt];
+          const temp = current.clone();
+          const result = temp.build(x, y, type);
+          for (const { cells } of result.phase) {
+            for (const [x, y] of cells) {
+              preview.grid.cells[x][y].reaction = true;
+            }
+          }
+          target.value = temp.grid.cells[x][y].value;
+          target.isPreview = true;
+          return preview;
+        }
+        break;
+      }
+
+      case 'star': {
+        if (current.numStars && !cell.value) {
+          const preview = current.clone();
+          const target = preview.grid.cells[x][y];
+          const temp = current.clone();
+          const result = temp.putStar(x, y);
+          for (const { cells } of result.phase) {
+            for (const [x, y] of cells) {
+              preview.grid.cells[x][y].reaction = true;
+            }
+          }
+          target.value = temp.grid.cells[x][y].value;
+          target.isPreview = true;
+          return preview;
+        }
+        break;
+      }
+
+      case 'bomb': break;
+    }
+
+    return current;
+  }
+
+  getDisplayState() {
+    const { hover, hoverType } = this.state;
+    const current = this.currentStep;
+
+    if (!hover) return current;
+
+    switch (hoverType) {
+      case 'cell':
+        return this.getToolPreview(current, this.state.selectedTools[0], hover);
+      
+      case 'history':
+        return hover;
+      
+      default:
+        throw new Error('Unknown hover type.');
+    }
   }
 
   renderGameUI() {
     const history = this.state.history;
-    const current = this.state.preview || this.currentStep;
     const queue = this.state.buildQueue;
+    const current = this.getDisplayState();
 
     const toolButtons = [
       {
@@ -282,16 +370,16 @@ class Game extends React.Component {
       );
     });
 
-    const historyItems = history.map((state, index) => {
+    const historyItems = history.map((item, index) => {
       return (
         <li
           key={index}
           className={index === this.state.stepNumber ? "active" : ""}
-          onMouseOver={() => this.setState({ preview: state })}
-          onMouseOut={() => this.setState({ preview: null })}
-          onClick={() => this.jumpTo(index)}
+          onMouseOver={() => this.handleHistoryHover(item)}
+          onMouseOut={() => this.handleHistoryHover(null)}
+          onClick={() => this.setState({ stepNumber: index })}
         >
-          {state.command || '(start)'}
+          {item.command || 'Start'}
         </li>
       );
     });
@@ -327,8 +415,8 @@ class Game extends React.Component {
           <div className="game-board">
             <Board
               grid={current.grid}
-              onHover={(x, y) => this.handleHover(x, y)}
-              onClick={(x, y, evt) => this.handleClick(x, y, evt)}
+              onHover={this.handleHover}
+              onClick={this.handleClick}
             />
           </div>
           <div className="game-info">

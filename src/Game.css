@@ -31,13 +31,13 @@ body {
   background: #d0d1d3;
 }
 
-.game-tool-btn.active-second {
-  background: #c9ddf3;
+.game-tool-btn.active {
+  background: #9dc3eb;
   color: #000;
 }
 
-.game-tool-btn.active {
-  background: #c2c3c4;
+.game-tool-btn.active-second {
+  background: #d2e4f7;
   color: #000;
 }
 
@@ -74,16 +74,21 @@ body {
   transition: background-color linear 0.2s 0s;
 }
 
-.board-cell-clickable {
-  cursor: pointer;
-}
-
 .board-cell:hover {
   background: #f7f7f7;
 }
 
 .board-cell-empty {
   background: #e7e7e7;
+}
+
+.board-cell-reaction:not(.board-cell-preview) {
+  background: #fff !important;
+  color: #ccc !important;
+}
+
+.board-cell-preview > span {
+  opacity: 0.6;
 }
 
 .board-cell-1 {
@@ -95,7 +100,7 @@ body {
   background: #dfdfee;
 }
 .board-cell-3 {
-  color: #14146b;
+  color: #0606a8;
   background: #dadaec;
 }
 
@@ -121,7 +126,7 @@ body {
   background: #eedfdf;
 }
 .board-cell-9 {
-  color: #6b1414;
+  color: #a81414;
   background: #ecdada;
 }
 
@@ -143,8 +148,8 @@ body {
 }
 
 .game-history > ol {
-  margin: 4px;
-  padding: 4px 4px 4px 20px;
+  margin: 4px 4px 4px 0;
+  padding: 4px 4px 4px 48px;
 }
 
 .game-info > ul > li {
