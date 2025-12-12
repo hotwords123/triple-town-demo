@@ -14,7 +14,7 @@ class ToastItem extends React.Component {
     this.state = {
       show: false
     };
-    setImmediate(() => {
+    queueMicrotask(() => {
       this.setState({ show: true });
     });
   }
